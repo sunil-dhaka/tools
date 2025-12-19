@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Sun · Earth · Moon — System Focus</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      --panel: rgba(10, 14, 24, 0.92);
+      --border: rgba(255, 255, 255, 0.16);
+      --accent: #6be3ff;
+      --accent-strong: #ffb347;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top, #050817, #010205 70%);
+      color: #f7fbff;
+      overflow: hidden;
+    }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; }
+    #panel {
+      position: fixed;
+      top: 1rem;
+      left: 1rem;
+      width: clamp(320px, 30vw, 440px);
+      padding: 1.1rem;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 24px 50px rgba(0,0,0,0.6);
+      z-index: 5;
+    }
+    #panel h1 { margin: 0 0 0.6rem; font-size: 1.4rem; }
+    label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9rem; margin-bottom: 0.7rem; }
+    input[type="datetime-local"], input[type="range"], select {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.08);
+      color: inherit;
+      padding: 0.35rem 0.6rem;
+      font-size: 0.9rem;
+    }
+    .row { display: flex; gap: 0.4rem; margin-bottom: 0.7rem; }
+    button {
+      flex: 1;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.08);
+      color: inherit;
+      padding: 0.35rem 0.6rem;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background .2s ease;
+    }
+    button:hover { background: rgba(255,255,255,0.2); }
+    button.active { background: var(--accent); color: #03121c; border-color: transparent; }
+    #focus-buttons {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.35rem;
+      margin-bottom: 0.7rem;
+    }
+    #hud {
+      padding: 0.8rem;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    #legend {
+      position: fixed;
+      bottom: 1rem;
+      right: 1rem;
+      padding: 0.8rem 1rem;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: rgba(5,10,20,0.85);
+      backdrop-filter: blur(10px);
+      font-size: 0.85rem;
+      line-height: 1.5;
+      max-width: 300px;
+      z-index: 4;
+    }
+    #loading {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #010309;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      z-index: 10;
+      transition: opacity .4s ease;
+    }
+    #loading.hidden { opacity: 0; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="loading">Preparing scene…</div>
+  <div id="panel">
+    <h1>Sun · Earth · Moon</h1>
+    <label>UTC Date &amp; Time
+      <input type="datetime-local" id="datetime-input" />
+    </label>
+    <label>Time Speed (log)
+      <input type="range" id="speed-slider" min="0" max="4" step="0.01" value="2" />
+    </label>
+    <div class="row">
+      <button id="play-toggle">Pause</button>
+      <button id="now-button">Now</button>
+    </div>
+    <label>View
+      <div class="row" id="view-buttons">
+        <button data-view="system" class="active">System</button>
+        <button data-view="surface">Stand Here</button>
+      </div>
+    </label>
+    <div id="focus-buttons">
+      <button data-focus="system" class="active">All</button>
+      <button data-focus="sun">Sun</button>
+      <button data-focus="earth">Earth</button>
+      <button data-focus="moon">Moon</button>
+    </div>
+    <button id="reset-view" style="width:100%;margin-bottom:0.7rem;">Reset Wide View</button>
+    <label>Observer Body
+      <select id="body-select">
+        <option value="earth">Earth</option>
+        <option value="moon">Moon</option>
+      </select>
+    </label>
+    <label>Latitude
+      <input type="range" id="lat-slider" min="-90" max="90" value="0" />
+    </label>
+    <label>Longitude
+      <input type="range" id="lon-slider" min="-180" max="180" value="0" />
+    </label>
+    <div class="row" id="lat-shortcuts">
+      <button data-lat="0" data-lon="0">Equator</button>
+      <button data-lat="75" data-lon="0">North Pole</button>
+      <button data-lat="-75" data-lon="0">South Pole</button>
+    </div>
+    <label>Scale Mode
+      <select id="scale-select">
+        <option value="demo">Intuitive (1:1000)</option>
+        <option value="true">True Scale</option>
+      </select>
+    </label>
+    <div id="hud">
+      <div><strong id="hud-date">—</strong></div>
+      <div id="hud-location">Observer · —</div>
+      <div id="hud-sun">Sun altitude —</div>
+      <div id="hud-moon">Moon phase —</div>
+      <div id="hud-note">—</div>
+    </div>
+  </div>
+  <div id="legend">
+    • Default view shows all three bodies with orbit lines.<br/>
+    • Click a body or use the focus buttons to frame it while keeping the others in view.<br/>
+    • “Stand Here” locks the camera a few km above the selected latitude/longitude on Earth or Moon.
+  </div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/controls/OrbitControls.js';
+
+    const DEG2RAD = Math.PI / 180;
+    const RAD2DEG = 180 / Math.PI;
+    const JULIAN_J2000 = 2451545.0;
+    const EARTH_RADIUS = 6378.137;
+    const MOON_RADIUS = 1737.4;
+    const SUN_RADIUS = 696340;
+    const AU = 149597870.7;
+    const KM_TO_UNIT = 1 / 1000;
+
+    const speeds = [0, 300, 3600, 86400, 604800];
+
+    const assetUrls = {
+      earthDay: 'https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg',
+      earthNight: 'https://threejs.org/examples/textures/planets/earth_lights_2048.png',
+      earthNormal: 'https://threejs.org/examples/textures/planets/earth_normal_2048.jpg',
+      earthSpec: 'https://threejs.org/examples/textures/planets/earth_specular_2048.jpg',
+      earthClouds: 'https://threejs.org/examples/textures/planets/earth_clouds_1024.png',
+      moonAlbedo: 'https://threejs.org/examples/textures/planets/moon_1024.jpg'
+    };
+
+    const EARTH_ORBIT = { a: AU, e: 0.0167086, i: 0, omega: 102.93768193 * DEG2RAD, Omega: -11.26064 * DEG2RAD, M0: 357.51716 * DEG2RAD, periodDays: 365.256363 };
+    const MOON_ORBIT = { a: 384400, e: 0.0549, i: 5.145 * DEG2RAD, omega: 318.15 * DEG2RAD, Omega: 125.08 * DEG2RAD, M0: 115.3654 * DEG2RAD, periodDays: 27.321661 };
+
+    const ui = {
+      datetime: document.getElementById('datetime-input'),
+      speed: document.getElementById('speed-slider'),
+      play: document.getElementById('play-toggle'),
+      now: document.getElementById('now-button'),
+      viewButtons: [...document.querySelectorAll('#view-buttons button')],
+      focusButtons: [...document.querySelectorAll('#focus-buttons button')],
+      resetView: document.getElementById('reset-view'),
+      body: document.getElementById('body-select'),
+      lat: document.getElementById('lat-slider'),
+      lon: document.getElementById('lon-slider'),
+      latShortcuts: [...document.querySelectorAll('#lat-shortcuts button')],
+      scale: document.getElementById('scale-select')
+    };
+
+    const hud = {
+      date: document.getElementById('hud-date'),
+      location: document.getElementById('hud-location'),
+      sun: document.getElementById('hud-sun'),
+      moon: document.getElementById('hud-moon'),
+      note: document.getElementById('hud-note')
+    };
+
+    const state = {
+      date: new Date('2026-03-20T12:00:00Z'),
+      speedIndex: 2,
+      paused: false,
+      view: 'system',
+      focus: 'system',
+      observerBody: 'earth',
+      lat: 0,
+      lon: 0,
+      scaleMode: 'demo',
+      scaleFactor: 0.001
+    };
+
+    const textures = {};
+    let renderer, scene, camera, controls;
+    const clock = new THREE.Clock();
+    let raycaster = new THREE.Raycaster();
+    let pointer = new THREE.Vector2();
+    let stars, sun, earthGroup, earth, earthClouds, earthMarker, moonGroup, moon, moonMarker;
+    let orbitEarth, orbitMoon;
+    const orbitSegments = 256;
+
+    loadTextures().then(init).catch((err) => {
+      console.error(err);
+      document.getElementById('loading').textContent = 'Failed to load textures';
+    });
+
+    function loadTextures() {
+      const loader = new THREE.TextureLoader();
+      loader.crossOrigin = 'anonymous';
+      const entries = Object.entries(assetUrls);
+      return Promise.all(entries.map(([key, url]) => new Promise((resolve) => {
+        loader.load(url, (tex) => {
+          tex.colorSpace = THREE.SRGBColorSpace;
+          textures[key] = tex;
+          resolve();
+        }, undefined, () => {
+          const fallback = new THREE.DataTexture(new Uint8Array([255,255,255,255]), 1, 1);
+          fallback.needsUpdate = true;
+          textures[key] = fallback;
+          resolve();
+        });
+      })));
+    }
+
+    function init() {
+      setupRenderer();
+      buildScene();
+      setupUI();
+      updateScale();
+      updateDateInput();
+      updateFocusButtons();
+      document.getElementById('loading').classList.add('hidden');
+      animate();
+    }
+
+    function setupRenderer() {
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      document.getElementById('app').appendChild(renderer.domElement);
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x02060f);
+
+      camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.0001, 1e6);
+      camera.position.set(0.6, 0.3, 1.6);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.minDistance = 0.002;
+      controls.maxDistance = 10;
+
+      renderer.domElement.addEventListener('pointerdown', handlePick);
+      window.addEventListener('resize', handleResize);
+    }
+
+    function buildScene() {
+      createStars();
+      createSun();
+      createEarth();
+      createMoon();
+      createOrbits();
+    }
+
+    function createStars() {
+      const count = 30000;
+      const positions = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        const r = 1200 + Math.random() * 600;
+        const theta = Math.acos(THREE.MathUtils.randFloatSpread(2));
+        const phi = Math.random() * Math.PI * 2;
+        positions[i*3] = r * Math.sin(theta) * Math.cos(phi);
+        positions[i*3+1] = r * Math.cos(theta);
+        positions[i*3+2] = r * Math.sin(theta) * Math.sin(phi);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const mat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.8, sizeAttenuation: true, transparent: true, opacity: 0.6 });
+      stars = new THREE.Points(geo, mat);
+      scene.add(stars);
+    }
+
+    function createSun() {
+      const geo = new THREE.SphereGeometry(1, 64, 64);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffc56e });
+      sun = new THREE.Mesh(geo, mat);
+      sun.name = 'sun';
+      const light = new THREE.PointLight(0xffffff, 2.5, 0, 2);
+      sun.add(light);
+      scene.add(sun);
+    }
+
+    function createEarth() {
+      earthGroup = new THREE.Group();
+      scene.add(earthGroup);
+      const geo = new THREE.SphereGeometry(1, 256, 256);
+      const mat = new THREE.ShaderMaterial({
+        uniforms: {
+          dayMap: { value: textures.earthDay },
+          nightMap: { value: textures.earthNight },
+          normalMap: { value: textures.earthNormal },
+          specMap: { value: textures.earthSpec },
+          sunDir: { value: new THREE.Vector3(1, 0, 0) },
+          time: { value: 0 }
+        },
+        vertexShader: /* glsl */`
+          varying vec3 vNormal;
+          varying vec3 vWorld;
+          varying vec2 vUv;
+          void main(){
+            vUv = uv;
+            vNormal = normalize(normalMatrix * normal);
+            vec4 wp = modelMatrix * vec4(position,1.0);
+            vWorld = wp.xyz;
+            gl_Position = projectionMatrix * viewMatrix * wp;
+          }
+        `,
+        fragmentShader: /* glsl */`
+          uniform sampler2D dayMap;
+          uniform sampler2D nightMap;
+          uniform sampler2D normalMap;
+          uniform sampler2D specMap;
+          uniform vec3 sunDir;
+          uniform float time;
+          varying vec3 vNormal;
+          varying vec3 vWorld;
+          varying vec2 vUv;
+          vec3 sampleNormal(){
+            vec3 n = texture2D(normalMap, vUv).xyz * 2.0 - 1.0;
+            vec3 dp1 = dFdx(vWorld);
+            vec3 dp2 = dFdy(vWorld);
+            vec2 duv1 = dFdx(vUv);
+            vec2 duv2 = dFdy(vUv);
+            vec3 tangent = normalize(dp1 * duv2.y - dp2 * duv1.y);
+            vec3 bitangent = normalize(-dp1 * duv2.x + dp2 * duv1.x);
+            mat3 tbn = mat3(tangent, bitangent, normalize(vNormal));
+            return normalize(tbn * n);
+          }
+          void main(){
+            vec3 normal = sampleNormal();
+            vec3 lightDir = normalize(sunDir);
+            float ndotl = max(dot(normal, lightDir), 0.0);
+            vec3 day = texture2D(dayMap, vUv).rgb;
+            vec3 night = texture2D(nightMap, vUv + vec2(time*0.0003, -time*0.0003)).rgb;
+            vec3 color = mix(night * 0.5, day, smoothstep(0.0, 0.4, ndotl));
+            vec3 viewDir = normalize(cameraPosition - vWorld);
+            vec3 halfDir = normalize(lightDir + viewDir);
+            float spec = pow(max(dot(normal, halfDir), 0.0), 30.0) * texture2D(specMap, vUv).g;
+            color += spec * vec3(0.8,0.9,1.0);
+            gl_FragColor = vec4(color, 1.0);
+          }
+        `
+      });
+      earth = new THREE.Mesh(geo, mat);
+      earth.name = 'earth';
+      earth.rotation.z = 23.439281 * DEG2RAD;
+      earthGroup.add(earth);
+
+      const eq = makeCircleLine(1.01, 64, 0xffffff, 0.2);
+      earth.add(eq);
+
+      const cloudGeo = new THREE.SphereGeometry(1.01, 128, 128);
+      earthClouds = new THREE.Mesh(cloudGeo, new THREE.MeshLambertMaterial({ map: textures.earthClouds, transparent: true, opacity: 0.7 }));
+      earth.add(earthClouds);
+
+      earthMarker = new THREE.Mesh(new THREE.SphereGeometry(0.02, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffb347 }));
+      earth.add(earthMarker);
+    }
+
+    function createMoon() {
+      moonGroup = new THREE.Group();
+      scene.add(moonGroup);
+      const geo = new THREE.SphereGeometry(1, 128, 128);
+      moon = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: textures.moonAlbedo, roughness: 1 }));
+      moon.name = 'moon';
+      moonGroup.add(moon);
+      const eq = makeCircleLine(1.01, 48, 0x9ecbff, 0.2);
+      moon.add(eq);
+      moonMarker = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 12), new THREE.MeshBasicMaterial({ color: 0x9ecbff }));
+      moon.add(moonMarker);
+    }
+
+    function createOrbits() {
+      orbitEarth = makeOrbitLine(AU, 0x5ad8ff);
+      orbitMoon = makeOrbitLine(MOON_ORBIT.a * 5, 0xffb347);
+      scene.add(orbitEarth, orbitMoon);
+    }
+
+    function makeOrbitLine(radiusKm, color) {
+      const positions = new Float32Array((orbitSegments + 1) * 3);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.35 });
+      const line = new THREE.LineLoop(geo, mat);
+      line.userData.radiusKm = radiusKm;
+      return line;
+    }
+
+    function makeCircleLine(radius, segments, color, opacity) {
+      const geo = new THREE.BufferGeometry();
+      const positions = [];
+      for (let i = 0; i <= segments; i++) {
+        const a = (i / segments) * Math.PI * 2;
+        positions.push(Math.cos(a) * radius, 0, Math.sin(a) * radius);
+      }
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      return new THREE.LineLoop(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity }));
+    }
+
+    function setupUI() {
+      ui.datetime.addEventListener('change', () => { if (ui.datetime.value) state.date = new Date(ui.datetime.value); });
+      ui.speed.addEventListener('input', () => {
+        state.speedIndex = THREE.MathUtils.clamp(Math.round(parseFloat(ui.speed.value)), 0, speeds.length - 1);
+      });
+      ui.play.addEventListener('click', () => {
+        state.paused = !state.paused;
+        ui.play.textContent = state.paused ? 'Play' : 'Pause';
+      });
+      ui.now.addEventListener('click', () => { state.date = new Date(); updateDateInput(); });
+      ui.viewButtons.forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.view)));
+      ui.focusButtons.forEach(btn => btn.addEventListener('click', () => setFocus(btn.dataset.focus)));
+      ui.resetView.addEventListener('click', () => { setFocus('system'); setView('system'); });
+      ui.body.addEventListener('change', () => { state.observerBody = ui.body.value; });
+      ui.lat.addEventListener('input', () => { state.lat = parseFloat(ui.lat.value); });
+      ui.lon.addEventListener('input', () => { state.lon = parseFloat(ui.lon.value); });
+      ui.latShortcuts.forEach(btn => btn.addEventListener('click', () => {
+        state.lat = parseFloat(btn.dataset.lat);
+        state.lon = parseFloat(btn.dataset.lon);
+        ui.lat.value = state.lat;
+        ui.lon.value = state.lon;
+      }));
+      ui.scale.addEventListener('change', () => {
+        state.scaleMode = ui.scale.value;
+        state.scaleFactor = state.scaleMode === 'demo' ? 0.001 : 1;
+        updateScale();
+      });
+      ui.lat.value = state.lat;
+      ui.lon.value = state.lon;
+    }
+
+    function setView(view) {
+      state.view = view;
+      ui.viewButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.view === view));
+      if (view !== 'system') ui.focusButtons.forEach(btn => btn.classList.remove('active'));
+      if (view === 'system' && state.focus === 'surface') state.focus = 'system';
+    }
+
+    function setFocus(focus) {
+      state.focus = focus;
+      if (state.view !== 'system') {
+        state.view = 'system';
+        updateViewButtons();
+      }
+      updateFocusButtons();
+    }
+
+    function updateFocusButtons() {
+      ui.focusButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.focus === state.focus));
+    }
+
+    function updateViewButtons() {
+      ui.viewButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.view === state.view));
+    }
+
+    function updateDateInput() {
+      const d = state.date;
+      const pad = (n) => String(n).padStart(2, '0');
+      ui.datetime.value = `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+    }
+
+    function updateScale() {
+      const scale = KM_TO_UNIT * state.scaleFactor;
+      sun.scale.setScalar(SUN_RADIUS * scale);
+      earthGroup.scale.setScalar(EARTH_RADIUS * scale);
+      moonGroup.scale.setScalar(MOON_RADIUS * scale);
+      updateOrbitGeometry(orbitEarth);
+      updateOrbitGeometry(orbitMoon);
+      controls.maxDistance = state.scaleMode === 'true' ? AU * KM_TO_UNIT * state.scaleFactor * 3 : 5;
+      controls.minDistance = state.scaleMode === 'true' ? AU * KM_TO_UNIT * 0.0005 : 0.002;
+    }
+
+    function updateOrbitGeometry(line) {
+      const radius = line.userData.radiusKm * KM_TO_UNIT * state.scaleFactor;
+      const positions = line.geometry.attributes.position.array;
+      for (let i = 0; i <= orbitSegments; i++) {
+        const a = (i / orbitSegments) * Math.PI * 2;
+        const idx = i * 3;
+        positions[idx] = Math.cos(a) * radius;
+        positions[idx+1] = 0;
+        positions[idx+2] = Math.sin(a) * radius;
+      }
+      line.geometry.attributes.position.needsUpdate = true;
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(0.05, clock.getDelta());
+      if (!state.paused) {
+        state.date = new Date(state.date.getTime() + (speeds[state.speedIndex] || 0) * dt * 1000);
+        updateDateInput();
+      }
+      updateScene();
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    function updateScene() {
+      const scale = KM_TO_UNIT * state.scaleFactor;
+      const jd = toJulian(state.date);
+      const earthState = orbitalState(EARTH_ORBIT, jd);
+      const earthPos = earthState.position.clone().multiplyScalar(scale);
+      earthGroup.position.copy(earthPos);
+
+      const moonState = orbitalState(MOON_ORBIT, jd);
+      const moonPos = earthPos.clone().add(moonState.position.clone().multiplyScalar(scale));
+      moonGroup.position.copy(moonPos);
+
+      sun.position.set(0, 0, 0);
+
+      const sunDirToEarth = sun.position.clone().sub(earthPos).normalize();
+      earth.material.uniforms.sunDir.value.copy(sunDirToEarth);
+      earth.material.uniforms.time.value = jd;
+      earthClouds.rotation.y += 0.002;
+      moon.lookAt(earthPos);
+
+      positionMarker(earthMarker, state.lat, state.lon);
+      positionMarker(moonMarker, state.lat, state.lon);
+
+      updateCamera(earthPos, moonPos);
+      updateHUD(jd, earthState, moonState, earthPos, moonPos);
+    }
+
+    function updateCamera(earthPos, moonPos) {
+      if (state.view === 'surface') {
+        const targetMesh = state.observerBody === 'earth' ? earthMarker : moonMarker;
+        const bodyPos = state.observerBody === 'earth' ? earthPos : moonPos;
+        const worldPos = new THREE.Vector3();
+        targetMesh.getWorldPosition(worldPos);
+        const normal = worldPos.clone().sub(bodyPos).normalize();
+        const offset = state.observerBody === 'earth' ? EARTH_RADIUS * KM_TO_UNIT * state.scaleFactor * 0.2 : MOON_RADIUS * KM_TO_UNIT * state.scaleFactor * 0.3;
+        const desiredPos = worldPos.clone().add(normal.clone().multiplyScalar(offset));
+        camera.position.lerp(desiredPos, 0.3);
+        controls.target.lerp(worldPos, 0.3);
+        return;
+      }
+      const focusMap = {
+        system: { point: new THREE.Vector3(0,0,0), offset: new THREE.Vector3(0.6,0.3,1.4) },
+        sun: { point: sun.position.clone(), offset: new THREE.Vector3(0.5,0.25,1.3) },
+        earth: { point: earthPos.clone(), offset: new THREE.Vector3(0.3,0.15,0.8) },
+        moon: { point: moonPos.clone(), offset: new THREE.Vector3(0.24,0.12,0.5) }
+      };
+      const focus = focusMap[state.focus] || focusMap.system;
+      const distanceScale = state.scaleMode === 'true' ? AU * KM_TO_UNIT * state.scaleFactor * 1.3 : 1.4;
+      const desiredPos = focus.point.clone().add(focus.offset.clone().multiplyScalar(distanceScale));
+      controls.target.lerp(focus.point, 0.15);
+      camera.position.lerp(desiredPos, 0.15);
+    }
+
+    function updateHUD(jd, earthState, moonState, earthPos, moonPos) {
+      hud.date.textContent = state.date.toUTCString();
+      hud.location.textContent = `Observer · ${state.observerBody} · lat ${state.lat.toFixed(0)}°`;
+      const surfaceMesh = state.observerBody === 'earth' ? earthMarker : moonMarker;
+      const bodyPos = state.observerBody === 'earth' ? earthPos : moonPos;
+      const worldPos = new THREE.Vector3();
+      surfaceMesh.getWorldPosition(worldPos);
+      const up = worldPos.clone().sub(bodyPos).normalize();
+      const sunDir = sun.position.clone().sub(worldPos).normalize();
+      const sunAlt = Math.asin(sunDir.dot(up)) * RAD2DEG;
+      hud.sun.textContent = `Sun altitude ${sunAlt.toFixed(1)}° ${polarNote(sunAlt)}`;
+      const earthToSun = sun.position.clone().sub(earthPos).normalize();
+      const earthToMoon = moonPos.clone().sub(earthPos).normalize();
+      const phase = (1 - earthToSun.dot(earthToMoon)) / 2;
+      hud.moon.textContent = `Moon phase ${(phase * 100).toFixed(1)}%`;
+      hud.note.textContent = state.view === 'system' ? 'Click a body or use focus buttons. Scroll to zoom.' : 'Drag to spin around your location. Scroll to adjust altitude.';
+    }
+
+    function polarNote(alt) {
+      if (Math.abs(state.lat) > 66) return alt > 0 ? '· polar day' : '· polar night';
+      return '';
+    }
+
+    function positionMarker(marker, lat, lon) {
+      const latRad = lat * DEG2RAD;
+      const lonRad = lon * DEG2RAD;
+      const x = Math.cos(latRad) * Math.cos(lonRad);
+      const y = Math.sin(latRad);
+      const z = Math.cos(latRad) * Math.sin(lonRad);
+      marker.position.set(x, y, z);
+    }
+
+    function handlePick(event) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const intersects = raycaster.intersectObjects([sun, earth, moon], true);
+      if (intersects.length) {
+        const root = intersects[0].object;
+        const name = root.name || (root.parent ? root.parent.name : null);
+        if (['sun','earth','moon'].includes(name)) setFocus(name);
+      }
+    }
+
+    function handleResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function orbitalState(elements, jd) {
+      const n = 2 * Math.PI / elements.periodDays;
+      const M = elements.M0 + n * (jd - JULIAN_J2000);
+      const E = keplerSolve(M, elements.e);
+      const nu = 2 * Math.atan2(Math.sqrt(1 + elements.e) * Math.sin(E / 2), Math.sqrt(1 - elements.e) * Math.cos(E / 2));
+      const r = elements.a * (1 - elements.e * Math.cos(E));
+      const xPrime = r * Math.cos(nu);
+      const yPrime = r * Math.sin(nu);
+      const cosO = Math.cos(elements.Omega);
+      const sinO = Math.sin(elements.Omega);
+      const cosi = Math.cos(elements.i);
+      const sini = Math.sin(elements.i);
+      const cosw = Math.cos(elements.omega);
+      const sinw = Math.sin(elements.omega);
+      const x = (cosO * cosw - sinO * sinw * cosi) * xPrime + (-cosO * sinw - sinO * cosw * cosi) * yPrime;
+      const y = (sinO * cosw + cosO * sinw * cosi) * xPrime + (-sinO * sinw + cosO * cosw * cosi) * yPrime;
+      const z = (sinw * sini) * xPrime + (cosw * sini) * yPrime;
+      return { position: new THREE.Vector3(x, z, y) };
+    }
+
+    function keplerSolve(M, e) {
+      let E = M;
+      for (let i = 0; i < 12; i++) {
+        const delta = (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+        E -= delta;
+        if (Math.abs(delta) < 1e-6) break;
+      }
+      return E;
+    }
+
+    function toJulian(date) {
+      return date.getTime() / 86400000 + 2440587.5;
+    }
+  </script>
+</body>
+</html>
