@@ -3,21 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tools — Sunil Dhaka</title>
+  <title>Tools -- Sunil Dhaka</title>
   <style>
+    :root {
+      --bg: #0D1117;
+      --bg-card: #161B22;
+      --text: #D0D7DE;
+      --text-muted: #7D8590;
+      --accent: #58A6FF;
+      --border: #30363D;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
       line-height: 1.5;
-      margin: 0;
-      padding: 0;
-      color: #222;
     }
-    a { color: #0066cc; text-decoration: none; }
+    a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
     nav {
-      background: linear-gradient(to bottom, #2a2a3e 0%, #1a1a2e 100%);
-      color: #fff;
-      padding: 0;
+      border-bottom: 1px solid var(--border);
     }
     nav .inner {
       display: flex;
@@ -25,10 +31,9 @@
       align-items: center;
       max-width: 800px;
       margin: 0 auto;
-      padding: 6px 2rem;
+      padding: 10px 2rem;
+      font-size: 0.9rem;
     }
-    nav a { color: #fff; }
-    nav a:hover { text-decoration: none; opacity: 0.8; }
     .content {
       max-width: 800px;
       margin: 0 auto;
@@ -38,35 +43,43 @@
       font-family: Georgia, "Times New Roman", serif;
       font-size: 1.4rem;
       margin-top: 1.2rem;
+      color: #fff;
     }
-    h2 { margin-top: 1.8rem; font-size: 1.15rem; }
+    h2 {
+      margin-top: 1.8rem;
+      font-size: 1.1rem;
+      color: #fff;
+      padding-bottom: 0.3rem;
+      border-bottom: 1px solid var(--border);
+    }
     p.intro {
-      color: #555;
+      color: var(--text-muted);
       font-size: 0.95rem;
+      margin-top: 0.5rem;
     }
     ul { padding-left: 1.2rem; }
     li { margin-bottom: 0.4rem; }
     .empty {
-      color: #999;
+      color: var(--text-muted);
       font-style: italic;
       margin: 2rem 0;
     }
     code {
-      background: rgba(27,31,35,0.05);
+      background: var(--bg-card);
       border-radius: 3px;
       padding: 0.2em 0.4em;
       font-size: 0.9em;
     }
     @media (max-width: 600px) {
       .content { padding: 0.5rem 1rem 2rem; }
-      nav .inner { padding: 6px 1rem; }
+      nav .inner { padding: 8px 1rem; }
     }
   </style>
 </head>
 <body>
   <nav>
     <div class="inner">
-      <a href="/">Sunil Dhaka's Tools</a>
+      <a href="/tools/">Tools</a>
       <a href="https://sunil-dhaka.github.io/">Blog</a>
     </div>
   </nav>
