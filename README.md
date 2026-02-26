@@ -1,2 +1,3 @@
-# tools
-some useful tools to help with things
+# Tools
+
+Assorted useful tools, mostly single-page HTML apps. Live at [sunil-dhaka.github.io/tools](https://sunil-dhaka.github.io/tools/).
